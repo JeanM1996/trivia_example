@@ -1,190 +1,203 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:onboarding_flow/business/auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:onboarding_flow/models/user.dart';
 
-import 'package:frideos_core/frideos_core.dart';
+class MainScreen extends StatefulWidget {
+  final FirebaseUser firebaseUser;
 
-import 'package:frideos/frideos.dart';
+  MainScreen({this.firebaseUser});
 
-import '../API/api_interface.dart';
-import '../API/mock_api.dart';
-import '../API/trivia_api.dart';
-import '../blocs/trivia_bloc.dart';
-import '../models/category.dart';
-import '../models/models.dart';
-import '../models/question.dart';
-import '../models/theme.dart';
+  _MainScreenState createState() => _MainScreenState();
+}
 
-class AppState extends AppStateModel {
-  factory AppState() => _singletonAppState;
-
-  AppState._internal() {
-    print('-------APP STATE INIT--------');
-    _createThemes(themes);
-    _loadCategories();
-
-    countdown.value = 10.toString();
-    countdown.setTransformer(validateCountdown);
-
-    questionsAmount.value = 5.toString();
-    questionsAmount.setTransformer(validateAmount);
-
-    triviaBloc = TriviaBloc(
-        countdownStream: countdown,
-        questions: questions,
-        tabController: tabController);
-  }
-
-  static final AppState _singletonAppState = AppState._internal();
-
-  // THEMES
-  final themes = List<MyTheme>();
-  final currentTheme = StreamedValue<MyTheme>();
-
-  // API
-  QuestionsAPI api = MockAPI();
-  final apiType = StreamedValue<ApiType>(initialData: ApiType.mock);
-
-  // TABS
-  final tabController = StreamedValue<AppTab>(initialData: AppTab.main);
-
-  // TRIVIA
-  final categoriesStream = StreamedList<Category>();
-  final categoryChosen = StreamedValue<Category>();
-  final questions = StreamedList<Question>();
-  final questionsDifficulty =
-      StreamedValue<QuestionDifficulty>(initialData: QuestionDifficulty.medium);
-
-  final questionsAmount = StreamedTransformed<String, String>();
-
-  final validateAmount =
-      StreamTransformer<String, String>.fromHandlers(handleData: (str, sink) {
-    if (str.isNotEmpty) {
-      final amount = int.tryParse(str);
-      if (amount > 1 && amount <= 15) {
-        sink.add(str);
-      } else {
-        sink.addError('Insert a value from 2 to 15..');
-      }
-    } else {
-      sink.addError('Insert a value.');
-    }
-  });
-
-  // BLOC
-  TriviaBloc triviaBloc;
-
-  // COUNTDOWN
-  final countdown = StreamedTransformed<String, String>();
-
-  final validateCountdown =
-      StreamTransformer<String, String>.fromHandlers(handleData: (str, sink) {
-    if (str.isNotEmpty) {
-      final time = int.tryParse(str);
-      if (time >= 3 && time <= 90) {
-        sink.add(str);
-      } else {
-        sink.addError('Insert a value from 3 to 90 seconds.');
-      }
-    } else {
-      sink.addError('Insert a value.');
-    }
-  });
+class _MainScreenState extends State<MainScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = new GlobalKey<ScaffoldState>();
 
   @override
-  Future<void> init() async {
-    final String lastTheme = await Prefs.getPref('apptheme');
-    if (lastTheme != null) {
-      currentTheme.value = themes.firstWhere((theme) => theme.name == lastTheme,
-          orElse: () => themes[0]);
-    } else {
-      currentTheme.value = themes[0];
-    }
+  void initState() {
+    super.initState();
+    print(widget.firebaseUser);
   }
-
-  Future _loadCategories() async {
-    final isLoaded = await api.getCategories(categoriesStream);
-    if (isLoaded) {
-      categoryChosen.value = categoriesStream.value.last;
-    }
-  }
-
-  Future _loadQuestions() async {
-    await api.getQuestions(
-        questions: questions,
-        number: int.parse(questionsAmount.value),
-        category: categoryChosen.value,
-        difficulty: questionsDifficulty.value,
-        type: QuestionType.multiple);
-  }
-
-  void setCategory(Category category) => categoryChosen.value = category;
-
-  void setDifficulty(QuestionDifficulty difficulty) =>
-      questionsDifficulty.value = difficulty;
-
-  void setApiType(ApiType type) {
-    if (apiType.value != type) {
-      apiType.value = type;
-      if (type == ApiType.mock) {
-        api = MockAPI();
-      } else {
-        api = TriviaAPI();
-      }
-      _loadCategories();
-    }
-  }
-
-  void _createThemes(List<MyTheme> themes) {
-    themes.addAll([
-      MyTheme(
-        name: 'Default',
-        brightness: Brightness.dark,
-        backgroundColor: const Color(0xff111740),
-        scaffoldBackgroundColor: const Color(0xff111740),
-        primaryColor: const Color(0xff283593),
-        primaryColorBrightness: Brightness.dark,
-        accentColor: Colors.blue[300],
-      ),
-      MyTheme(
-        name: 'Dark',
-        brightness: Brightness.dark,
-        backgroundColor: Colors.black,
-        scaffoldBackgroundColor: Colors.black,
-        primaryColor: Colors.blueGrey[900],
-        primaryColorBrightness: Brightness.dark,
-        accentColor: Colors.blue[900],
-      ),
-    ]);
-  }
-
-  void setTheme(MyTheme theme) {
-    currentTheme.value = theme;
-    Prefs.savePref<String>('apptheme', theme.name);
-  }
-
-  set _changeTab(AppTab appTab) => tabController.value = appTab;
-
-  void startTrivia() {
-    _loadQuestions();
-    _changeTab = AppTab.trivia;
-  }
-
-  void endTrivia() => tabController.value = AppTab.main;
-
-  void showSummary() => tabController.value = AppTab.summary;
 
   @override
-  void dispose() {
-    print('---------APP STATE DISPOSE-----------');
-    apiType.dispose();
-    categoryChosen.dispose();
-    countdown.dispose();
-    currentTheme.dispose();
-    questions.dispose();
-    questionsAmount.dispose();
-    questionsDifficulty.dispose();
-    tabController.dispose();
-    triviaBloc.dispose();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      key: _scaffoldKey,
+      appBar: new AppBar(
+        elevation: 0.5,
+        leading: new IconButton(
+            icon: new Icon(Icons.menu),
+            onPressed: () => _scaffoldKey.currentState.openDrawer()),
+        title: Text("Home"),
+        centerTitle: true,
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: <Widget>[
+            DrawerHeader(
+              child: Text('Drawer Header'),
+            ),
+            ListTile(
+              title: Text('Log Out'),
+              onTap: () {
+                _logOut();
+                _scaffoldKey.currentState.openEndDrawer();
+              },
+            ),
+          ],
+        ),
+      ),
+      body: StreamBuilder(
+        stream: Auth.getUser(widget.firebaseUser.uid),
+        builder: (BuildContext context, AsyncSnapshot<User> snapshot) {
+          if (!snapshot.hasData) {
+            return Center(
+              child: CircularProgressIndicator(
+                valueColor: new AlwaysStoppedAnimation<Color>(
+                  Color.fromRGBO(212, 20, 15, 1.0),
+                ),
+              ),
+            );
+          } else {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  Container(
+                    height: 100.0,
+                    width: 100.0,
+                    child: CircleAvatar(
+                      backgroundImage: (snapshot.data.profilePictureURL != '')
+                          ? NetworkImage(snapshot.data.profilePictureURL)
+                          : AssetImage("assets/images/default.png"),
+                    ),
+                  ),
+                  Text("Name: ${snapshot.data.firstName}"),
+                  Text("Email: ${snapshot.data.email}"),
+                  Text("UID: ${snapshot.data.userID}"),
+                ],
+              ),
+            );
+  Widget build(BuildContext context) {
+    final appState = AppState();
+
+    return FadeInWidget(
+      duration: 750,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 36.0),
+        child: ValueBuilder<List<Category>>(
+          streamed: appState.categoriesStream,
+          noDataChild: const CircularProgressIndicator(),
+          builder: (context, snapshot) {
+            final categories = snapshot.data;
+
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: <Widget>[
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: <Widget>[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 28.0, vertical: 56.0),
+                      child: const Text(
+                        'TRIVIA',
+                        style: TextStyle(
+                          fontSize: 46.0,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: 4.0,
+                          shadows: [
+                            Shadow(
+                              blurRadius: 8.0,
+                              color: Colors.lightBlueAccent,
+                              offset: Offset(3.0, 4.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      'Choose a category:',
+                      style: TextStyle(
+                        fontSize: 16.0,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        shadows: [
+                          Shadow(
+                            blurRadius: 14.0,
+                            color: Colors.lightBlueAccent,
+                          ),
+                        ],
+                      ),
+                    ),
+                    ValueBuilder<Category>(
+                      streamed: appState.categoryChosen,
+                      builder: (context, snapshotCategory) =>
+                          DropdownButton<Category>(
+                            isExpanded: true,
+                            value: snapshotCategory.data,
+                            onChanged: appState.setCategory,
+                            items: categories
+                                .map<DropdownMenuItem<Category>>(
+                                  (value) => DropdownMenuItem<Category>(
+                                        value: value,
+                                        child: Text(
+                                          value.name,
+                                          style: const TextStyle(
+                                            fontSize: 16.0,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.orange,
+                                          ),
+                                        ),
+                                      ),
+                                )
+                                .toList(),
+                          ),
+                    ),
+                  ],
+                ),
+                GestureDetector(
+                  child: Container(
+                    alignment: Alignment.center,
+                    height: 36,
+                    width: 90,
+                    decoration: BoxDecoration(
+                        color: Theme.of(context).primaryColor,
+                        borderRadius: const BorderRadius.all(
+                          Radius.circular(35),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.blue,
+                              blurRadius: 2.0,
+                              spreadRadius: 2.5),
+                        ]),
+                    child: const Text(
+                      'Play trivia',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  onTap: appState.startTrivia,
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+}
+            
+          }
+        },
+      ),
+    );
+  }
+
+  void _logOut() async {
+    Auth.signOut();
   }
 }
